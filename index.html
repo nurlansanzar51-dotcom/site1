@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="kk" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Семей - Ертіс Су Мониторингі (Enterprise Platform)</title>
+ 
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  } catch (e) {}
+})();
+</script>
+ 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+ 
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+ 
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Rubik', 'system-ui', 'Segoe UI', 'Arial', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'ui-monospace', 'Consolas', 'monospace']
+        }
+      }
+    }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+ 
+<style>
+  :root {
+    --ink: #0b2a3d; --muted: #46667a;
+    --glass: rgba(255, 255, 255, .62);
+    --glass-edge: rgba(255, 255, 255, .85);
+    --line: rgba(11, 79, 108, .16);
+    --field: rgba(255, 255, 255, .75);
+    --accent: #0e9fb3; --ok: #0b9b7c; --warn: #c98609; --danger: #d92f43;
+    --shadow: 0 18px 50px -22px rgba(11, 79, 108, .45);
+  }
+  .dark {
+    --ink: #e6f7ff; --muted: #8fb4c8;
+    --glass: rgba(7, 30, 47, .55);
+    --glass-edge: rgba(125, 211, 252, .18);
+    --line: rgba(125, 211, 252, .15);
+    --field: rgba(4, 22, 36, .6);
+    --accent: #2dd4e6; --ok: #34d3b0; --warn: #f2b134; --danger: #ff6677;
+    --shadow: 0 18px 50px -22px rgba(0, 0, 0, .7);
+  }
+ 
+  html { scroll-behavior: smooth; }
+  body { color: var(--ink); font-feature-settings: "tnum"; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ 
+  .bg-scene {
+    position: fixed; inset: 0; z-index: -1; overflow: hidden;
+    background: linear-gradient(160deg, #e2f7fb 0%, #bfe6f2 48%, #8fcde6 100%);
+  }
+  .dark .bg-scene { background: linear-gradient(160deg, #04141f 0%, #07283d 55%, #0a4a63 100%); }
+  .bg-scene i {
+    position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55;
+    animation: drift 38s ease-in-out infinite alternate;
+  }
+  .bg-scene i:nth-child(1) { width: 46vw; height: 46vw; left: -12vw; top: -14vw; background: #38d5e6; }
+  .bg-scene i:nth-child(2) { width: 38vw; height: 38vw; right: -10vw; top: 22vh; background: #3b82f6; animation-duration: 46s; }
+  .bg-scene i:nth-child(3) { width: 34vw; height: 34vw; left: 28vw; bottom: -18vw; background: #14b8a6; animation-duration: 52s; }
+  .dark .bg-scene i { opacity: .28; }
+  @keyframes drift { to { transform: translate3d(4vw, 3vh, 0) scale(1.08); } }
+ 
+  .glass {
+    background: var(--glass);
+    border: 1px solid var(--glass-edge);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .25);
+  }
+  .muted { color: var(--muted); }
+  .divider { border-color: var(--line); }
+ 
+  .field {
+    width: 100%; padding: .65rem .9rem; border-radius: .75rem;
+    background: var(--field); border: 1px solid var(--line); color: var(--ink);
+    font-size: .95rem; transition: border-color .15s, box-shadow .15s;
+  }
+  .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); outline: none; }
+  .dark select option { background: #0b2a3d; color: #e6f7ff; }
+ 
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .65rem 1.1rem; border-radius: .75rem; font-weight: 500; font-size: .92rem;
+    border: 1px solid var(--line); background: var(--field); color: var(--ink);
+    cursor: pointer; transition: transform .12s, background .15s, border-color .15s;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary {
+    background: linear-gradient(135deg, #0e9fb3, #1d6fd1); color: #fff; border-color: transparent;
+    box-shadow: 0 10px 24px -10px rgba(14, 159, 179, .9);
+  }
+  .btn-primary:hover { filter: brightness(1.08); border-color: transparent; }
+  .icon-btn { width: 2.5rem; height: 2.5rem; padding: 0; border-radius: .75rem; }
+ 
+  .tab-btn { padding: .5rem 1.1rem; border-radius: .75rem; font-weight: 500; font-size: .92rem; transition: all .2s; border: 1px solid transparent; }
+  .tab-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(14,159,179, .4); }
+  .tab-btn:not(.active):hover { background: var(--field); border-color: var(--line); }
+ 
+  .badge { display: inline-flex; align-items: center; gap: .4rem; padding: .18rem .65rem; border-radius: 999px; font-size: .8rem; font-weight: 500; }
+  .badge i { width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
+  .badge-ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); }
+  .badge-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); }
+  .badge-danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 16%, transparent); }
+  .t-ok { color: var(--ok); } .t-warn { color: var(--warn); } .t-danger { color: var(--danger); }
+ 
+  .pulse-dot { position: relative; width: .6rem; height: .6rem; border-radius: 50%; background: var(--ok); }
+  .pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; animation: ping 1.8s ease-out infinite; }
+  @keyframes ping { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(3); opacity: 0; } }
+ 
+  .alert-banner {
+    display: flex; align-items: center; gap: 1rem; position: relative; overflow: hidden;
+    padding: .9rem 1.2rem; border-radius: 1.1rem; color: #fff;
+    background: linear-gradient(90deg, #a30f26, #e03a4b, #a30f26); background-size: 200% 100%;
+    animation: alertflow 3.2s linear infinite, alertglow 1.2s ease-in-out infinite alternate;
+  }
+  .alert-banner[hidden] { display: none; }
+  @keyframes alertflow { to { background-position: -200% 0; } }
+  @keyframes alertglow { from { box-shadow: 0 8px 30px -10px rgba(224,58,75,.55); } to { box-shadow: 0 12px 50px -4px rgba(224,58,75,.95); } }
+ 
+  .gauge-wrap { position: relative; flex: none; width: 74px; height: 136px; }
+  .gauge {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 40px; border-radius: 12px; overflow: hidden;
+    background: color-mix(in srgb, var(--ink) 8%, transparent); border: 1px solid var(--line);
+  }
+  .gauge-fill {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0;
+    background: linear-gradient(180deg, #67e8f9, #0e7490 70%, #164e63);
+    transition: height 1.2s cubic-bezier(.2, .8, .2, 1);
+  }
+  .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; letter-spacing: -.02em; }
+ 
+  #map { border-radius: 1rem; z-index: 10; background: #1a2a3a; height: 380px; width: 100%; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--glass); color: var(--ink); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--glass-edge); }
+  .dark .leaflet-popup-content-wrapper, .dark .leaflet-popup-tip { background: rgba(7, 30, 47, .92); }
+  .leaflet-popup-content { margin: 12px 14px; font-family: 'Rubik', system-ui, sans-serif; }
+ 
+  .tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: .85rem; padding: .65rem .9rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .tbl td { padding: .6rem .9rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .tbl tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+ 
+  dialog.sheet {
+    margin: auto; width: min(94vw, 32rem); padding: 0; border-radius: 1.4rem; color: var(--ink);
+    background: var(--glass); border: 1px solid var(--glass-edge);
+    -webkit-backdrop-filter: blur(24px) saturate(150%); backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .6);
+  }
+  .dark dialog.sheet { background: rgba(7, 30, 47, .92); }
+  dialog.sheet::backdrop { background: rgba(2, 18, 30, .6); backdrop-filter: blur(6px); }
+  
+  .toast { display: flex; gap: .6rem; align-items: center; padding: .75rem 1rem; border-radius: .9rem; max-width: 22rem; font-size: .92rem;
+    background: rgba(7, 30, 47, .94); color: #e6f7ff; border: 1px solid rgba(125, 211, 252, .25); box-shadow: 0 14px 40px -12px rgba(0,0,0,.6); }
+</style>
+</head>
+ 
+<body class="font-sans min-h-screen antialiased">
+<div class="bg-scene" aria-hidden="true"><i></i><i></i><i></i></div>
+ 
+<!-- NAVBAR -->
+<header class="glass sticky top-0 z-[1100] border-x-0 border-t-0 rounded-none">
+  <div class="max-w-[1500px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-2xl grid place-items-center shrink-0" style="background:linear-gradient(135deg,#0e9fb3,#1d6fd1)">
+        <svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M2 14c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M2 19c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold leading-tight">Семей - Ертіс Су Мониторингі</h1>
+        <p class="text-xs muted">Абай облысы, Ертіс бассейні инспекциясы</p>
+      </div>
+    </div>
+ 
+    <!-- NAVIGATION TABS -->
+    <nav class="flex items-center gap-1 bg-field p-1 rounded-xl border divider overflow-x-auto">
+      <button class="tab-btn active" data-tab="dashboard">Басты бет</button>
+      <button class="tab-btn" data-tab="weekly">7 күндік Су Деңгейі & Тұрақтылық</button>
+      <button class="tab-btn" data-tab="analytics">Аналитика & Тереңдік</button>
+      <button class="tab-btn" data-tab="stations">Бекеттер</button>
+      <button class="tab-btn" data-tab="shulbinsk">Шүлбі СЭС & Су жіберу</button>
+      <button class="tab-btn" data-tab="simulation">Тасқынды Модельдеу</button>
+      <button class="tab-btn" data-tab="profile">Профиль</button>
+    </nav>
+ 
+    <div class="flex items-center gap-3">
+      <div class="text-right leading-tight hidden sm:block">
+        <div id="clockTime" class="num text-base">--:--:--</div>
+        <div id="clockDate" class="text-xs muted">—</div>
+      </div>
+      <div id="statusPill" class="flex items-center gap-2 px-3 py-1.5 rounded-full border divider" style="background:var(--field)">
+        <span class="pulse-dot"></span>
+        <span id="statusText" class="text-sm font-medium">Online</span>
+      </div>
+      <!-- USER PROFILE BADGE -->
+      <div id="userBadge" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border divider bg-field cursor-pointer hover:border-accent transition-colors" onclick="document.querySelector('[data-tab=\'profile\']').click()">
+        <div id="badgeAvatar" class="w-7 h-7 rounded-full bg-accent/20 grid place-items-center font-bold text-xs text-accent">ІЖ</div>
+        <div class="text-left text-xs leading-tight">
+          <div id="badgeName" class="font-semibold">Инженер Кезекші</div>
+          <div id="badgeRole" class="muted">Абай облысы ТЖД</div>
+        </div>
+      </div>
+      <button id="themeBtn" class="btn icon-btn" type="button" title="Тақырыпты ауыстыру">
+        <svg id="iconMoon" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+ 
+<main class="max-w-[1500px] mx-auto px-4 py-5 space-y-5">
+ 
+  <!-- ДАБЫЛ БАННЕРІ -->
+  <div id="alertBanner" class="alert-banner" hidden>
+    <div class="flex-1 min-w-0">
+      <div class="font-semibold text-lg">Қауіпті су деңгейі анықталды!</div>
+      <div id="alertText" class="text-sm opacity-95"></div>
+    </div>
+    <button id="alertClose" class="btn" type="button">Жабу</button>
+  </div>
+ 
+  <!-- ================= TAB 1: DASHBOARD ================= -->
+  <div id="tab-dashboard" class="space-y-5">
+    <section class="glass rounded-3xl p-4 flex flex-wrap items-end gap-4">
+      <div class="w-full sm:w-72">
+        <label for="stationSelect" class="block text-sm muted mb-1">Бақылау бекеті</label>
+        <select id="stationSelect" class="field"><option>Жүктелуде…</option></select>
+      </div>
+      <div class="w-full sm:w-52">
+        <label for="rangeSelect" class="block text-sm muted mb-1">График кезеңі</label>
+        <select id="rangeSelect" class="field">
+          <option value="12">Соңғы 12 өлшем</option>
+          <option value="24" selected>Соңғы 24 өлшем</option>
+          <option value="48">Соңғы 48 өлшем</option>
+        </select>
+      </div>
+      <div class="ml-auto flex items-center gap-3">
+        <button id="refreshBtn" class="btn">Жаңарту</button>
+        <button id="openEntry" class="btn btn-primary">Өлшем енгізу</button>
+      </div>
+    </section>
+ 
+    <!-- KPI CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <article class="glass rounded-3xl p-5 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="text-sm muted">Ағымдағы су деңгейі</h2>
+          <div class="mt-2 flex items-baseline gap-1.5"><span id="kpiLevel" class="num text-4xl">—</span><span class="text-lg muted">см</span></div>
+          <p id="kpiLevelSub" class="text-xs muted mt-2">Қауіпті шек: 450 см (Семей)</p>
+          <p id="stationName" class="text-sm font-medium mt-3 truncate">—</p>
+        </div>
+        <div class="gauge-wrap">
+          <div id="gauge" class="gauge">
+            <div id="gaugeFill" class="gauge-fill" style="height: 50%;"></div>
+            <div id="tickWarn" class="gauge-tick" style="top: 35%; border-color:var(--warn)"></div>
+            <div id="tickCrit" class="gauge-tick" style="top: 15%; border-color:var(--danger)"></div>
+          </div>
+          <span id="lblWarn" class="gauge-label t-warn" style="bottom: 65%;">350</span>
+          <span id="lblCrit" class="gauge-label t-danger" style="bottom: 85%;">450</span>
+        </div>
+      </article>
+
+      <article class="glass rounded-3xl p-5">
+        <h2 class="text-sm muted">Ағыс жылдамдығы</h2>
+        <div class="mt-2 flex items-center gap-2"><span id="kpiSpeed" class="num text-4xl">1.45</span><span class="text-lg muted">м/с</span></div>
+        <p id="kpiSpeedSub" class="text-xs muted mt-3">Семей аспалы көпірі тұсында</p>
+      </article>
+
+      <article class="glass rounded-3xl p-5">
+        <h2 class="text-sm muted">Тәуліктік өзгеріс</h2>
+        <div class="mt-2 flex items-center gap-2"><span id="kpiDelta" class="num text-4xl">+1.2</span><span class="text-lg muted">см</span></div>
+        <p id="kpiDeltaSub" class="text-xs muted mt-3">Шүлбі СЭС жіберу режимі</p>
+      </article>
+
+      <article class="glass rounded-3xl p-5">
+        <h2 class="text-sm muted">Су температурасы</h2>
+        <div class="mt-2 flex items-baseline gap-1.5"><span id="kpiTemp" class="num text-4xl">—</span><span class="text-lg muted">°C</span></div>
+        <p id="kpiTempSub" class="text-xs muted mt-3">Маусымдық нормаға сай</p>
+      </article>
+
+      <article class="glass rounded-3xl p-5">
+        <h2 class="text-sm muted">Ағымдағы статус</h2>
+        <div class="mt-3"><span id="kpiStatus" class="badge badge-ok text-base px-3 py-1.5"><i></i><span id="kpiStatusText">Тұрақты режим</span></span></div>
+        <p id="kpiStatusSub" class="text-xs muted mt-4">Қазгидромет деректерімен синхрондалған</p>
+      </article>
+    </section>
+ 
+    <!-- CHART & MAP -->
+    <section class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+      <article class="glass rounded-3xl p-5 xl:col-span-3 flex flex-col">
+        <h2 class="text-lg font-semibold mb-3">Су деңгейінің динамикасы (Ертіс өзені)</h2>
+        <div class="relative flex-1 min-h-[340px]"><canvas id="levelChart"></canvas></div>
+      </article>
+      <article class="glass rounded-3xl p-5 xl:col-span-2 flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Ертіс өзені және Семей картасы</h2>
+          <span class="text-xs muted bg-accent/10 text-accent px-2.5 py-1 rounded-lg">Real GIS Hydro</span>
+        </div>
+        <div id="map"></div>
+      </article>
+    </section>
+ 
+    <!-- TABLE -->
+    <section class="glass rounded-3xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Өлшемдер тарихы</h2>
+        <button id="csvBtn" class="btn btn-primary text-sm">CSV жүктеу</button>
+      </div>
+      <div class="overflow-x-auto rounded-2xl border divider">
+        <table class="tbl w-full text-sm">
+          <thead><tr><th>Уақыт</th><th>Деңгей, см</th><th>Температура, °C</th><th>Статус</th></tr></thead>
+          <tbody id="tableBody"><tr><td colspan="4" class="muted text-center py-4">Жүктелуде…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= TAB 2: RESTRUCTURED 7-DAY WATER LEVEL & STABILITY (ӨЗГЕШЕ ЖАҢАРТЫЛҒАН) ================= -->
+  <div id="tab-weekly" class="space-y-6 hidden">
+    <!-- БАСЫ ЖӘНЕ БОЛЖАМДЫҚ ВИДЖЕТТЕР -->
+    <div class="glass rounded-3xl p-6 space-y-6 bg-gradient-to-br from-slate-900/40 via-cyan-950/20 to-slate-900/40 border border-accent/20">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b divider pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-accent animate-pulse"></span>
+            <h2 class="text-2xl font-bold tracking-tight">7 Күндік Аналитика Және Стабильділік Мониторы</h2>
+          </div>
+          <p class="muted text-sm mt-1">Ертіс өзенінің Семей гидропостындағы соңғы апталық математикалық дисперсиясы мен салыстырмалы динамикасы</p>
+        </div>
+        <div class="flex items-center gap-2 bg-field px-4 py-2 rounded-2xl border divider">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"></path></svg>
+          <span class="text-xs font-semibold">Мониторинг типі: Тәуліктік Салыстыру</span>
+        </div>
+      </div>
+
+      <!-- ТРАНСФОРМАЦИЯЛАНҒАН ИНТЕРАКТИВДІ КАРТОЧКАЛАР -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass p-5 rounded-2xl space-y-2 border-t-4 border-cyan-400 relative overflow-hidden">
+          <div class="text-xs font-bold uppercase tracking-wider muted">Ағымдағы Деңгей</div>
+          <div class="num text-4xl font-extrabold text-accent" id="weekCurLevel">345.2 см</div>
+          <div class="text-xs muted flex items-center justify-between pt-2 border-t divider">
+            <span>Нормативті шек:</span>
+            <span class="font-bold text-emerald-400">450 см қауіпсіз</span>
+          </div>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-t-4 border-blue-500 relative overflow-hidden">
+          <div class="text-xs font-bold uppercase tracking-wider muted">7 Күндік Орташа Деңгей</div>
+          <div class="num text-4xl font-extrabold text-blue-400" id="weekAvgLevel">343.8 см</div>
+          <div class="text-xs muted flex items-center justify-between pt-2 border-t divider">
+            <span>Аударылу өрісі:</span>
+            <span class="num font-bold">±2.1 см</span>
+          </div>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-t-4 border-emerald-400 relative overflow-hidden">
+          <div class="text-xs font-bold uppercase tracking-wider muted">Тұрақтылық Коэффициенті</div>
+          <div class="num text-4xl font-extrabold text-emerald-400" id="weekStability">98.2%</div>
+          <div class="text-xs muted flex items-center justify-between pt-2 border-t divider">
+            <span>Статус:</span>
+            <span class="font-bold text-emerald-400" id="weekStabilityText">Өте тұрақты</span>
+          </div>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-t-4 border-purple-400 relative overflow-hidden">
+          <div class="text-xs font-bold uppercase tracking-wider muted">Апталық Ауытқу Мин/Макс</div>
+          <div class="num text-3xl font-extrabold text-purple-400" id="weekMinMax">339 - 348 см</div>
+          <div class="text-xs muted flex items-center justify-between pt-2 border-t divider">
+            <span>Макс. амплитуда:</span>
+            <span class="num font-bold text-purple-300">9 см</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ГРАФИК ЖӘНЕ КҮНДЕЛІКТІ ВИЗУАЛДЫ ПРОГРЕСС-БАРЛАР (ҮЛКЕН КӨРНЕКІ БӨЛІМ) -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        <!-- ДИНАМИКАЛЫҚ СТАБИЛЬДІЛІК ГРАФИГІ (LEFT 7 COLS) -->
+        <div class="glass p-6 rounded-3xl xl:col-span-7 flex flex-col justify-between space-y-4">
+          <div class="flex items-center justify-between border-b divider pb-3">
+            <h3 class="font-semibold text-lg flex items-center gap-2">
+              <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+              Соңғы 7 Күндегі Өзгеріс Динамикасы
+            </h3>
+            <span class="text-xs muted bg-field px-3 py-1 rounded-lg border divider">Метрика: см</span>
+          </div>
+          <div class="relative h-[300px] w-full">
+            <canvas id="weeklyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 7 КҮНДІК ВИЗУАЛДЫ ТИЛКЕЛЕР/ПРОГРЕСС БАРЛАР (RIGHT 5 COLS - ТОЛЫҚ БАПТАЛҒАН) -->
+        <div class="glass p-6 rounded-3xl xl:col-span-5 space-y-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b divider pb-3">
+            <h3 class="font-semibold text-lg">Күнделікті Прогрессивті Салыстыру</h3>
+            <span class="text-xs muted">Бүгінге дейінгі деңгейлер</span>
+          </div>
+
+          <div id="weeklyVisualBars" class="space-y-3">
+            <!-- JavaScript арқылы динамикалы визуализацияланады -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- САЛЫСТЫРМАЛЫ ТАЛДАУ БОЛЖАМДАРЫ -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="glass p-5 rounded-2xl border-l-4 border-cyan-500 space-y-2">
+          <div class="text-xs font-bold muted uppercase">Кешегі күнмен салыстыру</div>
+          <div class="num text-2xl font-bold text-cyan-400" id="cmpYesterday">+1.2 см</div>
+          <p class="text-xs muted">Өзен деңгейі қалыпты гидро-ауқымда сәл көтерілді.</p>
+        </div>
+
+        <div class="glass p-5 rounded-2xl border-l-4 border-blue-500 space-y-2">
+          <div class="text-xs font-bold muted uppercase">7 күн бұрынғымен салыстыру</div>
+          <div class="num text-2xl font-bold text-blue-400" id="cmp7DaysAgo">+3.5 см</div>
+          <p class="text-xs muted">Шүлбі СЭС-нен су жіберу мөлшерінің тұрақтылығын көрсетеді.</p>
+        </div>
+
+        <div class="glass p-5 rounded-2xl border-l-4 border-emerald-500 space-y-2">
+          <div class="text-xs font-bold muted uppercase">Гидрологиялық Болжам</div>
+          <div class="text-lg font-bold text-emerald-400">Қауіпсіз Режим (Тұрақты)</div>
+          <p class="text-xs muted">Алдағы 3 күнде су деңгейінің кенеттен өсуі күтілмейді.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+ 
+  <!-- ================= TAB 3: ANALYTICS & DEPTH ================= -->
+  <div id="tab-analytics" class="space-y-5 hidden">
+    <div class="glass rounded-3xl p-6 space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b divider pb-4">
+        <div>
+          <h2 class="text-xl font-semibold">Ертіс Өзенінің Тереңдігі, Таяз Желері Және Динамикасы</h2>
+          <p class="muted text-sm">Семей қаласы гидролокациясы, батыметриялық көрсеткіштер және көпжылдық су көлемінің тенденциялары</p>
+        </div>
+        <button id="saveAnalyticsBtn" class="btn btn-primary">Деректерді сақтау</button>
+      </div>
+
+      <!-- КЕҢЕЙТІЛГЕН ТЕРЕҢДІК МЕН ДИНАМИКА КАРТОЧКАЛАРЫ -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-cyan-500">
+          <div class="flex items-center justify-between">
+            <span class="text-xs muted uppercase tracking-wider">Ең Терең Жері</span>
+            <span class="badge badge-ok">Максимум</span>
+          </div>
+          <div class="num text-3xl font-bold text-accent">12.0 м</div>
+          <p class="text-xs font-semibold">Орталық аспалы көпір арнасы & Жоғарғы бьеф</p>
+          <p class="text-[11px] muted">Ағыс тез, фарватер тереңдігі сақталған.</p>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-amber-500">
+          <div class="flex items-center justify-between">
+            <span class="text-xs muted uppercase tracking-wider">Ең Таяз Жері</span>
+            <span class="badge badge-warn">Қауіпті</span>
+          </div>
+          <div class="num text-3xl font-bold t-warn">1.1 – 1.4 м</div>
+          <p class="text-xs font-semibold">Бейбітшілік аралы (Семипалатинка) & Бобровка</p>
+          <p class="text-[11px] muted">Маусымдық су азайғанда адамдар жаяу кешіп өте алады.</p>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-blue-500">
+          <div class="flex items-center justify-between">
+            <span class="text-xs muted uppercase tracking-wider">Орташа Тереңдігі</span>
+            <span class="badge badge-ok">Норма</span>
+          </div>
+          <div class="num text-3xl font-bold text-blue-400">4.5 – 6.2 м</div>
+          <p class="text-xs font-semibold">Семей қаласы ішіндегі негізгі арна</p>
+          <p class="text-[11px] muted">Шүлбі СЭС-інен жіберілетін орташа су көлеміне сай.</p>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-red-500">
+          <div class="flex items-center justify-between">
+            <span class="text-xs muted uppercase tracking-wider">Көпжылдық Динамика</span>
+            <span class="badge badge-danger">Азаю Тренды</span>
+          </div>
+          <div class="num text-2xl font-bold t-danger">Азаю Тәуекелі</div>
+          <p class="text-xs font-semibold">Маусымдық азаю & Реттелінетін ағын</p>
+          <p class="text-[11px] muted">Климаттық жылыну мен Қытайдан келетін судың азаюы әсер етеді.</p>
+        </div>
+      </div>
+
+      <!-- ЕРТІС ӨЗЕНІНІҢ СУ АЗАЮЫ / КӨБЕЮІ БОЙЫНША САРПТАМАЛЫҚ ТАЛДАУ -->
+      <div class="glass p-6 rounded-2xl space-y-4 bg-gradient-to-r from-slate-900/60 to-cyan-950/40 border border-accent/20">
+        <h3 class="font-bold text-lg text-accent flex items-center gap-2">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+          Ертіс өзені жыл сайын азайып бара жатыр ма, әлде көбейіп жатыр ма? (Ғылыми талдау)
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm leading-relaxed">
+          <div class="space-y-2">
+            <div class="font-semibold text-amber-400">1. Су деңгейінің азаюына әсер ететін негізгі факторлар:</div>
+            <ul class="list-disc list-inside space-y-1 muted text-xs">
+              <li><b>Трансшекаралық су шығыны:</b> Қытай Қара-Ертіс өзенінен ауыл шаруашылығы мен өнеркәсіпке суды көбірек алуда.</li>
+              <li><b>Климаттық өзгерістер:</b> Алтай тауларындағы мұздықтардың еруі мен жауын-шашын көлемінің азаюы.</li>
+              <li><b>Табиғи тармақталу:</b> Семей тұсында өзен аңғары кеңейіп, Бейбітшілік аралында су таязданады.</li>
+            </ul>
+          </div>
+          <div class="space-y-2">
+            <div class="font-semibold text-emerald-400">2. Су деңгейін реттеу және көбейту шаралары:</div>
+            <ul class="list-disc list-inside space-y-1 muted text-xs">
+              <li><b>Шүлбі СЭС ролі:</b> Көктемде Павлодар жайылмаларын суландыру кезеңінде Шүлбіден су жіберу 650-1200 м³/с дейін реттеледі.</li>
+              <li><b>Ауыл шаруашылық тасқыны:</b> Маусымдық су жіберу есебінен Семей гидропостында су деңгейі көтеріледі.</li>
+              <li><b>Тұжырым:</b> Ертіс өзені толық тартылып жатқан жоқ, бірақ **маусымдық төмендеу азонасы** жиілеп, реттелінетін жасанды режимге көшкен.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ФОТО-ДЕРЕКТЕР -->
+      <div class="space-y-3">
+        <h3 class="font-semibold text-lg flex items-center gap-2">Семей гидро-инфрақұрылымы мен фотосуреттер</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="glass rounded-2xl overflow-hidden border divider group">
+            <div class="h-40 bg-slate-800 overflow-hidden relative">
+              <img src="C:\Users\Bekta\OneDrive\Desktop\1200x720_ZWiX2lebRvI5IpnpKCf4NQcIXxZ6gSxx7qD6DmIq.jpg" alt="Семей аспалы көпірі" class="w-full h-full object-cover">
+              <span class="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md">Семей Аспалы Көпірі (Ең терең)</span>
+            </div>
+            <div class="p-3"><div class="font-semibold text-sm">Орталық көпір гидропосты</div><p class="text-xs muted">Ең терең бақылау нүктесі (12.0 м).</p></div>
+          </div>
+          <div class="glass rounded-2xl overflow-hidden border divider group">
+            <div class="h-40 bg-slate-800 overflow-hidden relative">
+              <img src="C:\Users\Bekta\OneDrive\Desktop\6236a5e42da84356487341.jpg" alt="Шүлбі СЭС" class="w-full h-full object-cover">
+              <span class="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md">Шүлбі Су Бөгеті</span>
+            </div>
+            <div class="p-3"><div class="font-semibold text-sm">Шүлбі су бөгеті</div><p class="text-xs muted">Су ағынын реттеуші негізгі тоған.</p></div>
+          </div>
+          <div class="glass rounded-2xl overflow-hidden border divider group">
+            <div class="h-40 bg-slate-800 overflow-hidden relative">
+              <img src="https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=800&q=80" alt="Су Зертханасы" class="w-full h-full object-cover">
+              <span class="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md">Су Зертханасы</span>
+            </div>
+            <div class="p-3"><div class="font-semibold text-sm">Су сапасының анализі</div><p class="text-xs muted">Күнделікті зертханалық тексеру.</p></div>
+          </div>
+          <div class="glass rounded-2xl overflow-hidden border divider group">
+            <div class="h-40 bg-slate-800 overflow-hidden relative">
+              <img src="C:\Users\Bekta\OneDrive\Desktop\mUOKGgGbAXAEpkyIqWt6ZToPUxTzJE677lhCRuEn.jpeg" alt="Жайылма аймақ" class="w-full h-full object-cover">
+              <span class="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md">Жайылма Аймақ (Таяз)</span>
+            </div>
+            <div class="p-3"><div class="font-semibold text-sm">Жайылма аймақ (Полковничий)</div><p class="text-xs muted">Өзеннің ең таяз жері (1.1-1.4 м).</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="glass p-5 rounded-2xl space-y-3">
+          <h3 class="font-semibold text-base">Семейдегі Ертіс суының ғылыми-тарихи анықтамасы</h3>
+          <textarea id="anHistoricalNotes" class="field" rows="4">Ертіс өзені – Семей қаласының басты су артериясы. Өзен Қытайдағы Алтай тауларынан басталып, Қазақстан арқылы Солтүстік Мұзды мұхиттағы Кар теңізіне дейін ағады.</textarea>
+        </div>
+        <div class="glass p-5 rounded-2xl space-y-3">
+          <h3 class="font-semibold text-base">Ағымдағы гидрологиялық болжам (Қазгидромет)</h3>
+          <textarea id="anForecastText" class="field" rows="4">Ауа райының температуралық режимі мен Шүлбі су қоймасының толтырылу деңгейін ескере отырып, алдағы аптада Семей қаласы тұсында су деңгейі тұрақты сақталады.</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ================= TAB 4: STATIONS ================= -->
+  <div id="tab-stations" class="space-y-5 hidden">
+    <div class="glass rounded-3xl p-6 space-y-5">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-semibold">Семей өңіріндегі бақылау бекеттерін басқару</h2>
+          <p class="muted text-sm">Жаңа гидропост қосыңыз немесе қолданыстағы бекеттердің координаттарын өзгертіңіз.</p>
+        </div>
+        <button id="openAddStation" class="btn btn-primary">+ Жаңа бекет қосу</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="stationsListContainer"></div>
+    </div>
+  </div>
+ 
+  <!-- ================= TAB 5: SHULBINSK HPP & WATER DISCHARGE ================= -->
+  <div id="tab-shulbinsk" class="space-y-5 hidden">
+    <div class="glass rounded-3xl p-6 space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b divider pb-4">
+        <div>
+          <h2 class="text-xl font-semibold">Шүлбі СЭС Мониторингі & Су Жіберу Режимі</h2>
+          <p class="muted text-sm">Семей қаласының су деңгейін реттейтін негізгі гидротехникалық кешен көрсеткіштері</p>
+        </div>
+        <span class="badge badge-ok text-sm px-3 py-1">СЭС Режимі: Штаттық</span>
+      </div>
+
+      <!-- СЭС КӨРСЕТКІШТЕРІ -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass p-5 rounded-2xl">
+          <div class="text-xs muted mb-1">Су қоймасының толуы</div>
+          <div class="num text-3xl font-bold text-cyan-400">88.4 %</div>
+          <div class="text-xs muted mt-2">НПУ: 240.0 м (БС)</div>
+        </div>
+        <div class="glass p-5 rounded-2xl">
+          <div class="text-xs muted mb-1">Ағымдағы су жіберу (Сброс)</div>
+          <div class="num text-3xl font-bold text-emerald-400">850 м³/с</div>
+          <div class="text-xs muted mt-2">Гидроагрегаттар арқылы</div>
+        </div>
+        <div class="glass p-5 rounded-2xl">
+          <div class="text-xs muted mb-1">Келетін су ағыны (Приток)</div>
+          <div class="num text-3xl font-bold text-blue-400">872 м³/с</div>
+          <div class="text-xs muted mt-2">Өскемен СЭС төменгі бьефінен</div>
+        </div>
+        <div class="glass p-5 rounded-2xl">
+          <div class="text-xs muted mb-1">Бос су ағызу (Холостой сброс)</div>
+          <div class="num text-3xl font-bold text-amber-400">0 м³/с</div>
+          <div class="text-xs muted mt-2">Шлюздер жабық</div>
+        </div>
+      </div>
+
+      <div class="glass p-5 rounded-2xl space-y-3">
+        <h3 class="font-semibold text-lg">Шүлбі СЭС су жіберудің тәуліктік кестесі</h3>
+        <div class="overflow-x-auto">
+          <table class="tbl w-full text-sm">
+            <thead>
+              <tr>
+                <th>Уақыт аралығы</th>
+                <th>Жіберілетін су ($m^3/s$)</th>
+                <th>Семейге жету уақыты</th>
+                <th>Күтілетін деңгей өзгерісі</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>00:00 - 06:00</td><td class="num">820 м³/с</td><td>~6 сағатта</td><td>Тұрақты (±0 см)</td></tr>
+              <tr><td>06:00 - 12:00</td><td class="num">850 м³/с</td><td>~6 сағатта</td><td>+1.2 см</td></tr>
+              <tr><td>12:00 - 18:00</td><td class="num">880 м³/с</td><td>~6 сағатта</td><td>+2.0 см</td></tr>
+              <tr><td>18:00 - 24:00</td><td class="num">850 м³/с</td><td>~6 сағатта</td><td>Тұрақты</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TAB 6: FLOOD SIMULATION ================= -->
+  <div id="tab-simulation" class="space-y-5 hidden">
+    <div class="glass rounded-3xl p-6 space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b divider pb-4">
+        <div>
+          <h2 class="text-xl font-semibold">Тасқынды Модельдеу Жүйесі (Flood Simulation)</h2>
+          <p class="muted text-sm">Су деңгейі көтерілген жағдайда Семей қаласының су басу қаупі бар аймақтарын симуляциялау</p>
+        </div>
+        <span class="badge badge-warn text-sm px-3 py-1">ГИС Болжам Жүйесі</span>
+      </div>
+
+      <!-- СИМУЛЯЦИЯ СЛАЙДЕРІ -->
+      <div class="glass p-6 rounded-2xl space-y-4 bg-gradient-to-r from-slate-900/80 to-blue-950/60 border border-accent/30">
+        <div class="flex justify-between items-center">
+          <label for="simRange" class="font-semibold text-base">Су деңгейін жасанды көтеру симуляциясы:</label>
+          <span class="num text-2xl font-bold text-accent" id="simVal">+0 см</span>
+        </div>
+        <input type="range" id="simRange" min="0" max="150" step="10" value="0" class="w-full accent-accent cursor-pointer">
+        <div class="flex justify-between text-xs muted">
+          <span>Норма (345 см)</span>
+          <span>Ескерту (380 см)</span>
+          <span>Қауіпті (450 см)</span>
+          <span>Критикалық (495 см)</span>
+        </div>
+      </div>
+
+      <!-- СИМУЛЯЦИЯ НӘТИЖЕЛЕРІ -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-amber-500">
+          <div class="font-semibold text-base">1-сектор: Бейбітшілік аралы</div>
+          <div class="text-xs muted">Жайылма аймақтар мен саяжайлар</div>
+          <div class="text-sm font-bold pt-2" id="simSector1">Су басу тәуекелі: Төмен (5%)</div>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-orange-500">
+          <div class="font-semibold text-base">2-сектор: Бобровка & Пристань</div>
+          <div class="text-xs muted">Төменгі жағалау үйлері</div>
+          <div class="text-sm font-bold pt-2" id="simSector2">Су басу тәуекелі: Нөлдік (0%)</div>
+        </div>
+
+        <div class="glass p-5 rounded-2xl space-y-2 border-l-4 border-red-500">
+          <div class="font-semibold text-base">3-сектор: Шұғыла & Восточный</div>
+          <div class="text-xs muted">Өзен арнасының төменгі бөлігі</div>
+          <div class="text-sm font-bold pt-2" id="simSector3">Су басу тәуекелі: Нөлдік (0%)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TAB 7: PROFILE ================= -->
+  <div id="tab-profile" class="space-y-5 hidden">
+    <div id="profileAuthContainer" class="max-w-md mx-auto glass rounded-3xl p-8 space-y-6 shadow-2xl">
+      <div class="text-center space-y-2">
+        <h2 id="authFormTitle" class="text-2xl font-bold">Жүйеге кіру</h2>
+        <p id="authFormSubtitle" class="text-sm muted">Семей су мониторингі платформасын басқару үшін тіркелгіңізге кіріңіз</p>
+      </div>
+
+      <div class="grid grid-cols-2 p-1 bg-field rounded-xl border divider">
+        <button id="authSwitchLogin" class="py-2 rounded-lg font-semibold text-sm transition-all bg-accent text-white shadow-md">Кіру</button>
+        <button id="authSwitchRegister" class="py-2 rounded-lg font-semibold text-sm transition-all muted">Тіркелу</button>
+      </div>
+
+      <form id="formLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm muted mb-1">Email немесе Телефон</label>
+          <input type="text" id="loginId" class="field" required placeholder="example@abai-tjd.kz">
+        </div>
+        <div>
+          <label class="block text-sm muted mb-1">Құпия сөз</label>
+          <input type="password" id="loginPassword" class="field" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary w-full py-3 mt-2 font-semibold">Жүйеге кіру</button>
+      </form>
+
+      <form id="formRegister" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm muted mb-1">Толық аты-жөні</label>
+          <input type="text" id="regName" class="field" required placeholder="Айбек Ерболатов">
+        </div>
+        <div>
+          <label class="block text-sm muted mb-1">Email мекенжайы</label>
+          <input type="email" id="regEmail" class="field" required placeholder="a.erbolatov@abai-tjd.kz">
+        </div>
+        <div>
+          <label class="block text-sm muted mb-1">Телефон нөмірі</label>
+          <input type="tel" id="regPhone" class="field" required placeholder="+7 (707) 123-45-67">
+        </div>
+        <div>
+          <label class="block text-sm muted mb-1">Лауазымы / Ұйымы</label>
+          <input type="text" id="regOrg" class="field" required placeholder="Абай облысы ТЖД Бас маман">
+        </div>
+        <div>
+          <label class="block text-sm muted mb-1">Құпия сөз құру</label>
+          <input type="password" id="regPassword" class="field" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary w-full py-3 mt-2 font-semibold">Тіркелу және кіру</button>
+      </form>
+    </div>
+
+    <!-- Тіркелген пайдаланушы кабинеті -->
+    <div id="profileUserCabinet" class="max-w-2xl mx-auto glass rounded-3xl p-8 space-y-6 shadow-2xl hidden">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b divider pb-5">
+        <div class="flex items-center gap-4">
+          <div id="cabAvatar" class="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent to-blue-600 text-white grid place-items-center font-bold text-xl shadow-lg">ІЖ</div>
+          <div>
+            <h2 id="cabName" class="text-xl font-bold">Ілияс Жұмабаев</h2>
+            <p id="cabOrg" class="text-sm muted">Абай облысы ТЖД Инженері</p>
+          </div>
+        </div>
+        <button id="btnLogout" class="btn t-danger border-danger/30 hover:bg-danger/10">Жүйеден шығу</button>
+      </div>
+
+      <div class="space-y-4">
+        <h3 class="font-semibold text-lg">Профиль деректерін өзгерту</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm muted mb-1">Аты-жөні</label>
+            <input type="text" id="editName" class="field">
+          </div>
+          <div>
+            <label class="block text-sm muted mb-1">Email мекенжайы</label>
+            <input type="email" id="editEmail" class="field">
+          </div>
+          <div>
+            <label class="block text-sm muted mb-1">Телефон нөмірі</label>
+            <input type="tel" id="editPhone" class="field">
+          </div>
+          <div>
+            <label class="block text-sm muted mb-1">Лауазымы / Ұйымы</label>
+            <input type="text" id="editOrg" class="field">
+          </div>
+        </div>
+        <div class="pt-2">
+          <button id="btnSaveProfile" class="btn btn-primary px-6">Өзгерістерді сақтау</button>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <footer class="text-center text-xs muted pb-6">Семей - Ертіс Су Мониторингі · Enterprise Platform · Абай облысы</footer>
+</main>
+ 
+<!-- ӨЛШЕМ ЕНГІЗУ МОДАЛДЫ ТЕРЕЗЕСІ -->
+<dialog id="entryDialog" class="sheet">
+  <form id="entryForm" class="p-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold">Жаңа өлшем енгізу</h2>
+      <button type="button" id="entryClose" class="btn icon-btn" formnovalidate>✕</button>
+    </div>
+    <div>
+      <label class="block text-sm muted mb-1">Бекет</label>
+      <select id="fStation" class="field"></select>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm muted mb-1">Су деңгейі, см</label>
+        <input id="fLevel" class="field num" type="number" step="0.1" required placeholder="345">
+      </div>
+      <div>
+        <label class="block text-sm muted mb-1">Температура, °C</label>
+        <input id="fTemp" class="field num" type="number" step="0.1" required placeholder="6.5">
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 mt-4">
+      <button type="button" id="entryCancel" class="btn">Бас тарту</button>
+      <button type="submit" class="btn btn-primary">Сақтау</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ЖАҢА БЕКЕТ ҚОСУ МОДАЛДЫ ТЕРЕЗЕСІ -->
+<dialog id="stationDialog" class="sheet">
+  <form id="stationForm" class="p-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold" id="stationModalTitle">Жаңа бекет қосу</h2>
+      <button type="button" id="stationClose" class="btn icon-btn" formnovalidate>✕</button>
+    </div>
+    <input type="hidden" id="editStationId">
+    <div>
+      <label class="block text-sm muted mb-1">Бекет атауы</label>
+      <input type="text" id="stName" class="field" required placeholder="Мысалы: Семей гидропосты">
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm muted mb-1">Широта (Lat)</label>
+        <input type="number" step="0.0001" id="stLat" class="field num" required value="50.4150">
+      </div>
+      <div>
+        <label class="block text-sm muted mb-1">Долгота (Lng)</label>
+        <input type="number" step="0.0001" id="stLng" class="field num" required value="80.2500">
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm muted mb-1">Бастапқы деңгей (см)</label>
+      <input type="number" step="0.1" id="stLevel" class="field num" required value="340.0">
+    </div>
+    <div class="flex justify-end gap-3 mt-4">
+      <button type="button" id="stationCancel" class="btn">Бас тарту</button>
+      <button type="submit" class="btn btn-primary">Сақтау</button>
+    </div>
+  </form>
+</dialog>
+ 
+<div id="toasts" class="fixed bottom-4 right-4 z-[3000] flex flex-col gap-2"></div>
+ 
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  'use strict';
+
+  // Инициализация Supabase клиента
+  const SUPABASE_URL = 'https://6wPKO9AwyBy1ZxsRs9AEwY37sHB.supabase.co'; // Сформировано на основе API ключа
+  const SUPABASE_KEY = 'sb_publishable_6wPKO_9AwyBy1ZxsRs9AEw__Y37-sHB';
+  
+  let supabaseClient = null;
+  try {
+    if (window.supabase && window.supabase.createClient) {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+  } catch (err) {
+    console.error('Supabase init error:', err);
+  }
+  
+  let mockStations = JSON.parse(localStorage.getItem('semey_stations')) || [
+    { id: 1, name: 'Семей Орталық мінбері (Ертіс)', lat: 50.4150, lng: 80.2500, latest_level: 345.2 },
+    { id: 2, name: 'Бобровка ауылы тұсы', lat: 50.4420, lng: 80.2000, latest_level: 328.0 },
+    { id: 3, name: 'Жаңасемей гидропосты', lat: 50.4280, lng: 80.2280, latest_level: 352.5 },
+    { id: 4, name: 'Шүлбі СЭС төменгі бьефі', lat: 50.3520, lng: 81.0450, latest_level: 290.1 }
+  ];
+
+  let mockMeasurements = JSON.parse(localStorage.getItem('semey_measurements')) || {
+    1: generateInitialData(342),
+    2: generateInitialData(325),
+    3: generateInitialData(350),
+    4: generateInitialData(288)
+  };
+
+  let analyticsData = JSON.parse(localStorage.getItem('semey_analytics')) || {
+    historicalNotes: 'Ертіс өзені – Семей қаласының басты су артериясы.',
+    forecastText: 'Ауа райының температуралық режиміне сай су деңгейі тұрақты сақталады.'
+  };
+
+  let currentUser = JSON.parse(localStorage.getItem('semey_user')) || {
+    isAuth: true,
+    name: 'Ілияс Жұмабаев',
+    email: 'ilyas@abai-tjd.kz',
+    phone: '+7 (708) 123-45-67',
+    org: 'Абай облысы ТЖД Инженері'
+  };
+
+  function generateInitialData(base = 340) {
+    let arr = [];
+    let now = new Date();
+    for(let i = 20; i >= 0; i--) {
+      let d = new Date(now.getTime() - i * 3600 * 1000);
+      arr.push({
+        created_at: d.toISOString().replace('T', ' ').slice(0, 19),
+        level: Number((base + Math.sin(i * 0.4) * 3.5).toFixed(1)),
+        temperature: Number((6.2 + Math.cos(i * 0.2) * 1.2).toFixed(1))
+      });
+    }
+    return arr;
+  }
+
+  let state = { stations: mockStations, currentId: mockStations[0]?.id || 1, data: [] };
+  let map = null, markers = {}, chart = null, weeklyChart = null;
+ 
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d = 1) => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d });
+ 
+  // Загрузка данных из Supabase (если таблицы созданы, подтянет актуальные данные в реальном времени)
+  async function syncFromSupabase() {
+    if (!supabaseClient) return;
+    try {
+      // Загрузка станций
+      const { data: stData, error: stErr } = await supabaseClient.from('stations').select('*');
+      if (!stErr && stData && stData.length > 0) {
+        mockStations = stData;
+        state.stations = mockStations;
+        localStorage.setItem('semey_stations', JSON.stringify(mockStations));
+      }
+
+      // Загрузка измерений
+      const { data: mData, error: mErr } = await supabaseClient.from('measurements').select('*').order('created_at', { ascending: true });
+      if (!mErr && mData && mData.length > 0) {
+        let grouped = {};
+        mData.forEach(row => {
+          if (!grouped[row.station_id]) grouped[row.station_id] = [];
+          grouped[row.station_id].push({
+            created_at: row.created_at.replace('T', ' ').slice(0, 19),
+            level: row.level,
+            temperature: row.temperature
+          });
+        });
+        mockMeasurements = grouped;
+        localStorage.setItem('semey_measurements', JSON.stringify(mockMeasurements));
+      }
+
+      // Загрузка аналитики
+      const { data: anData, error: anErr } = await supabaseClient.from('analytics').select('*').limit(1).single();
+      if (!anErr && anData) {
+        analyticsData = {
+          historicalNotes: anData.historical_notes || analyticsData.historicalNotes,
+          forecastText: anData.forecast_text || analyticsData.forecastText
+        };
+        localStorage.setItem('semey_analytics', JSON.stringify(analyticsData));
+      }
+    } catch (e) {
+      console.log('Supabase sync notice: Using offline/local fallback storage.', e);
+    }
+  }
+
+  // Синхронизация сохранения в Supabase
+  async function saveMeasurementToSupabase(stationId, record) {
+    if (!supabaseClient) return;
+    try {
+      await supabaseClient.from('measurements').insert([{
+        station_id: stationId,
+        level: record.level,
+        temperature: record.temperature,
+        created_at: record.created_at
+      }]);
+    } catch (e) {
+      console.error('Supabase measurement save error:', e);
+    }
+  }
+
+  async function saveStationToSupabase(st) {
+    if (!supabaseClient) return;
+    try {
+      await supabaseClient.from('stations').upsert([{
+        id: st.id,
+        name: st.name,
+        lat: st.lat,
+        lng: st.lng,
+        latest_level: st.latest_level
+      }]);
+    } catch (e) {
+      console.error('Supabase station save error:', e);
+    }
+  }
+
+  async function deleteStationFromSupabase(id) {
+    if (!supabaseClient) return;
+    try {
+      await supabaseClient.from('stations').delete().eq('id', id);
+    } catch (e) {
+      console.error('Supabase station delete error:', e);
+    }
+  }
+
+  async function saveAnalyticsToSupabase() {
+    if (!supabaseClient) return;
+    try {
+      await supabaseClient.from('analytics').upsert([{
+        id: 1,
+        historical_notes: analyticsData.historicalNotes,
+        forecast_text: analyticsData.forecastText
+      }]);
+    } catch (e) {
+      console.error('Supabase analytics save error:', e);
+    }
+  }
+
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tabId = btn.getAttribute('data-tab');
+      ['dashboard', 'weekly', 'analytics', 'stations', 'shulbinsk', 'simulation', 'profile'].forEach(t => {
+        $(`tab-${t}`).classList.toggle('hidden', t !== tabId);
+      });
+      if(tabId === 'weekly') renderWeeklyTab();
+      if(tabId === 'stations') renderStationsTab();
+      if(tabId === 'analytics') loadAnalyticsToUI();
+      if(tabId === 'profile') renderProfileTab();
+      if(tabId === 'dashboard' && map) {
+        setTimeout(() => map.invalidateSize(), 150);
+      }
+    });
+  });
+
+  // 7-DAY WATER LEVEL & STABILITY CALCULATION (ЖАҢАРТЫЛҒАН ВИЗУАЛДАР)
+  function renderWeeklyTab() {
+    const now = new Date();
+    let weeklyData = [];
+    let baseLvl = state.data[state.data.length - 1]?.level || 345.2;
+
+    for(let i = 6; i >= 0; i--) {
+      let d = new Date(now.getTime() - i * 24 * 3600 * 1000);
+      let dayStr = d.toLocaleDateString('kk-KZ', { day: 'numeric', month: 'short' });
+      let lvl = Number((baseLvl - (i * 0.4) + Math.sin(i) * 1.5).toFixed(1));
+      let temp = Number((6.5 + Math.cos(i) * 0.8).toFixed(1));
+      weeklyData.push({ date: dayStr, level: lvl, temp: temp });
+    }
+
+    const levels = weeklyData.map(w => w.level);
+    const curLevel = levels[levels.length - 1];
+    const avgLevel = (levels.reduce((a,b) => a+b, 0) / levels.length).toFixed(1);
+    const minLevel = Math.min(...levels);
+    const maxLevel = Math.max(...levels);
+
+    const variance = levels.reduce((acc, val) => acc + Math.pow(val - avgLevel, 2), 0) / levels.length;
+    const stdDev = Math.sqrt(variance);
+    const stabilityIndex = Math.max(0, Math.min(100, (100 - (stdDev * 5)))).toFixed(1);
+
+    if($('weekCurLevel'))$('weekCurLevel').textContent = `${curLevel} см`;
+    if($('weekAvgLevel'))$('weekAvgLevel').textContent = `${avgLevel} см`;
+    if($('weekStability'))$('weekStability').textContent = `${stabilityIndex}%`;
+    if($('weekMinMax'))$('weekMinMax').textContent = `${minLevel} - ${maxLevel} см`;
+
+    const diffYesterday = (curLevel - levels[levels.length - 2]).toFixed(1);
+    const diff7Days = (curLevel - levels[0]).toFixed(1);
+
+    if($('cmpYesterday'))$('cmpYesterday').textContent = `${diffYesterday >= 0 ? '+' : ''}${diffYesterday} см`;
+    if($('cmp7DaysAgo'))$('cmp7DaysAgo').textContent = `${diff7Days >= 0 ? '+' : ''}${diff7Days} см`;
+
+    // ЖАҢА ПРОГРЕСС-БАР ТИЛКЕЛЕРІН ШЫҒАРУ (КҮНДЕЛІКТІ ВИЗУАЛИЗАЦИЯ)
+    const visualBarsContainer = $('weeklyVisualBars');
+    if(visualBarsContainer) {
+      const maxL = Math.max(...levels, 360);
+      visualBarsContainer.innerHTML = weeklyData.slice().reverse().map((item, idx) => {
+        const pct = Math.round((item.level / maxL) * 100);
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-bold">${item.date} ${idx === 0 ? '(Бүгін)' : ''}</span>
+              <span class="num font-bold text-accent">${item.level} см</span>
+            </div>
+            <div class="w-full h-3 bg-field rounded-full overflow-hidden border divider">
+              <div class="h-full bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 7 KUNDIK СТАБИЛЬДІЛІК ГРАФИГІ
+    const ctx = $('weeklyChart').getContext('2d');
+    if(weeklyChart) weeklyChart.destroy();
+    
+    weeklyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: weeklyData.map(w => w.date),
+        datasets: [{
+          label: 'Су деңгейі (см)',
+          data: levels,
+          borderColor: '#2dd4e6',
+          backgroundColor: 'rgba(45, 212, 230, 0.15)',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 3,
+          pointRadius: 6,
+          pointBackgroundColor: '#0e9fb3'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { grid: { color: 'rgba(125,211,252,0.1)' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // FLOOD SIMULATION SLIDER LOGIC
+  const simRange = $('simRange');
+  if(simRange) {
+    simRange.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      $('simVal').textContent = `+${val} см`;
+
+      if(val < 35) {
+        $('simSector1').textContent = `Су басу тәуекелі: Төмен (${5 + Math.round(val/2)}%)`;
+        $('simSector1').className = "text-sm font-bold pt-2 t-ok";
+        $('simSector2').textContent = `Су басу тәуекелі: Нөлдік (0%)`;
+        $('simSector2').className = "text-sm font-bold pt-2 t-ok";
+        $('simSector3').textContent = `Су басу тәуекелі: Нөлдік (0%)`;
+        $('simSector3').className = "text-sm font-bold pt-2 t-ok";
+      } else if(val < 80) {
+        $('simSector1').textContent = `Су басу тәуекелі: Жоғары (Саяжайлар) (${40 + Math.round(val/2)}%)`;
+        $('simSector1').className = "text-sm font-bold pt-2 t-warn";
+        $('simSector2').textContent = `Су басу тәуекелі: Орташа (${Math.round(val/3)}%)`;
+        $('simSector2').className = "text-sm font-bold pt-2 t-warn";
+        $('simSector3').textContent = `Су басу тәуекелі: Төмен (5%)`;
+        $('simSector3').className = "text-sm font-bold pt-2 t-ok";
+      } else {
+        $('simSector1').textContent = `ҚАУІПТІ: Бейбітшілік аралы су астында! (${90 + Math.round(val/15)}%)`;
+        $('simSector1').className = "text-sm font-bold pt-2 t-danger";
+        $('simSector2').textContent = `ҚАУІПТІ: Бобровка жағалауы су астында! (${60 + Math.round(val/4)}%)`;
+        $('simSector2').className = "text-sm font-bold pt-2 t-danger";
+        $('simSector3').textContent = `Ескерту: Төменгі көшелерге қауіп төнуде (${30 + Math.round(val/5)}%)`;
+        $('simSector3').className = "text-sm font-bold pt-2 t-warn";
+      }
+    });
+  }
+ 
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast glass'; 
+    el.innerHTML = `<span class="text-accent font-bold">●</span> ${msg}`;
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+ 
+  function updateClock() {
+    const now = new Date();
+    if($('clockTime'))$('clockTime').textContent = now.toLocaleTimeString('kk-KZ');
+    if($('clockDate'))$('clockDate').textContent = now.toLocaleDateString('kk-KZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+ 
+  $('themeBtn').onclick = () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  };
+
+  // Profile & Auth
+  function updateProfileHeaderUI() {
+    if(currentUser && currentUser.isAuth) {
+      const initials = currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase();
+      $('badgeAvatar').textContent = initials || 'ПФ';
+      $('badgeName').textContent = currentUser.name;
+      $('badgeRole').textContent = currentUser.org;
+    } else {
+      $('badgeAvatar').textContent = '—';$('badgeName').textContent = 'Қонақ';
+      $('badgeRole').textContent = 'Кіру / Тіркелу';
+    }
+  }
+
+  function renderProfileTab() {
+    if(currentUser && currentUser.isAuth) {
+      $('profileAuthContainer').classList.add('hidden');$('profileUserCabinet').classList.remove('hidden');
+
+      const initials = currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase();
+      $('cabAvatar').textContent = initials || 'ПФ';
+      $('cabName').textContent = currentUser.name;
+      $('cabOrg').textContent = currentUser.org;
+
+      $('editName').value = currentUser.name;
+      $('editEmail').value = currentUser.email;
+      $('editPhone').value = currentUser.phone;
+      $('editOrg').value = currentUser.org;
+    } else {
+      $('profileAuthContainer').classList.remove('hidden');$('profileUserCabinet').classList.add('hidden');
+    }
+  }
+
+  $('authSwitchLogin').onclick = () => {$('authSwitchLogin').className = 'py-2 rounded-lg font-semibold text-sm transition-all bg-accent text-white shadow-md';
+    $('authSwitchRegister').className = 'py-2 rounded-lg font-semibold text-sm transition-all muted';$('authFormTitle').textContent = 'Жүйеге кіру';
+    $('authFormSubtitle').textContent = 'Семей су мониторингі платформасын басқару үшін тіркелгіңізге кіріңіз';
+    $('formLogin').classList.remove('hidden');$('formRegister').classList.add('hidden');
+  };
+
+  $('authSwitchRegister').onclick = () => {$('authSwitchRegister').className = 'py-2 rounded-lg font-semibold text-sm transition-all bg-accent text-white shadow-md';
+    $('authSwitchLogin').className = 'py-2 rounded-lg font-semibold text-sm transition-all muted';$('authFormTitle').textContent = 'Тіркелу';
+    $('authFormSubtitle').textContent = 'Жаңа қызметкер немесе сарапшы ретінде тіркеліңіз';
+    $('formRegister').classList.remove('hidden');$('formLogin').classList.add('hidden');
+  };
+
+  $('formLogin').onsubmit = (e) => {
+    e.preventDefault();
+    currentUser.isAuth = true;
+    localStorage.setItem('semey_user', JSON.stringify(currentUser));
+    updateProfileHeaderUI();
+    renderProfileTab();
+    toast('Жүйеге сәтті кірдіңіз!');
+  };
+
+  $('formRegister').onsubmit = (e) => {
+    e.preventDefault();
+    currentUser = {
+      isAuth: true,
+      name: $('regName').value,
+      email: $('regEmail').value,
+      phone: $('regPhone').value,
+      org: $('regOrg').value
+    };
+    localStorage.setItem('semey_user', JSON.stringify(currentUser));
+    updateProfileHeaderUI();
+    renderProfileTab();
+    toast('Тіркелу сәтті аяқталды!');
+  };
+
+  $('btnSaveProfile').onclick = () => {
+    currentUser.name = $('editName').value;
+    currentUser.email = $('editEmail').value;
+    currentUser.phone = $('editPhone').value;
+    currentUser.org = $('editOrg').value;
+    localStorage.setItem('semey_user', JSON.stringify(currentUser));
+    updateProfileHeaderUI();
+    renderProfileTab();
+    toast('Профиль деректері сәтті сақталды!');
+  };
+
+  $('btnLogout').onclick = () => {
+    currentUser.isAuth = false;
+    localStorage.setItem('semey_user', JSON.stringify(currentUser));
+    updateProfileHeaderUI();
+    renderProfileTab();
+    toast('Жүйеден сәтті шықтыңыз');
+  };
+ 
+  function loadStations() {
+    state.stations = mockStations;
+    const sel = $('stationSelect'), fsel =$('fStation');
+    if(!sel || !fsel) return;
+    const html = state.stations.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    sel.innerHTML = html; 
+    fsel.innerHTML = html;
+    if(!state.stations.some(s => s.id == state.currentId) && state.stations.length) {
+      state.currentId = state.stations[0].id;
+    }
+    sel.value = state.currentId;
+  }
+ 
+  function loadMeasurements() {
+    if(!state.currentId) return;
+    state.data = mockMeasurements[state.currentId] || [];
+    renderAll();
+  }
+ 
+  function renderStationsTab() {
+    const container = $('stationsListContainer');
+    if(!container) return;
+    container.innerHTML = state.stations.map(s => `
+      <div class="glass p-5 rounded-2xl flex flex-col justify-between gap-3">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="font-semibold text-base">${s.name}</div>
+            <span class="num text-xl font-bold">${s.latest_level ? s.latest_level + ' см' : 'Дерек жоқ'}</span>
+          </div>
+          <div class="text-xs muted mt-1">Координаталар: Lat ${s.lat}, Lng ${s.lng}</div>
+          <div class="badge badge-ok mt-2"><i></i>Автоматика қосылған (Online Supabase)</div>
+        </div>
+        <div class="flex items-center gap-2 pt-2 border-t divider">
+          <button class="btn text-xs py-1 px-3" onclick="window.editStation(${s.id})">Өзгерту</button>
+          <button class="btn text-xs py-1 px-3 t-danger" onclick="window.deleteStation(${s.id})">Жою</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.editStation = (id) => {
+    const st = state.stations.find(s => s.id === id);
+    if(!st) return;
+    $('stationModalTitle').textContent = 'Бекетті өзгерту';
+    $('editStationId').value = st.id;
+    $('stName').value = st.name;
+    $('stLat').value = st.lat;
+    $('stLng').value = st.lng;
+    $('stLevel').value = st.latest_level || 340;
+    $('stationDialog').showModal();
+  };
+
+  window.deleteStation = async (id) => {
+    if(state.stations.length <= 1) {
+      toast('Кем дегенде 1 бекет қалуы тиіс!');
+      return;
+    }
+    if(confirm('Бұл бекетті өшіргіңіз келетініне сенімдісіз бе?')) {
+      mockStations = mockStations.filter(s => s.id !== id);
+      localStorage.setItem('semey_stations', JSON.stringify(mockStations));
+      await deleteStationFromSupabase(id);
+      loadStations();
+      loadMeasurements();
+      renderStationsTab();
+      toast('Бекет сәтті жойылды!');
+    }
+  };
+
+  $('openAddStation').onclick = () => {$('stationModalTitle').textContent = 'Жаңа бекет қосу';
+    $('editStationId').value = '';$('stName').value = '';
+    $('stLat').value = '50.4150';$('stLng').value = '80.2500';
+    $('stLevel').value = '340.0';$('stationDialog').showModal();
+  };
+
+  $('stationClose').onclick = $('stationCancel').onclick = (e) => { e.preventDefault();$('stationDialog').close(); };
+
+  $('stationForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const idVal = $('editStationId').value;
+    const name = $('stName').value;
+    const lat = Number($('stLat').value);
+    const lng = Number($('stLng').value);
+    const lvl = Number($('stLevel').value);
+
+    let targetSt;
+    if(idVal) {
+      targetSt = mockStations.find(s => s.id == idVal);
+      if(targetSt) {
+        targetSt.name = name;
+        targetSt.lat = lat;
+        targetSt.lng = lng;
+        targetSt.latest_level = lvl;
+      }
+      toast('Бекет деректері сәтті өзгертілді!');
+    } else {
+      const newId = Date.now();
+      targetSt = { id: newId, name, lat, lng, latest_level: lvl };
+      mockStations.push(targetSt);
+      mockMeasurements[newId] = generateInitialData(lvl);
+      localStorage.setItem('semey_measurements', JSON.stringify(mockMeasurements));
+      state.currentId = newId;
+      toast('Жаңа бекет сәтті қосылды!');
+    }
+
+    localStorage.setItem('semey_stations', JSON.stringify(mockStations));
+    await saveStationToSupabase(targetSt);
+
+    $('stationDialog').close();
+    loadStations();
+    loadMeasurements();
+    renderStationsTab();
+  };
+
+  function loadAnalyticsToUI() {
+    $('anHistoricalNotes').value = analyticsData.historicalNotes;
+    $('anForecastText').value = analyticsData.forecastText;
+  }
+
+  $('saveAnalyticsBtn').onclick = async () => {
+    analyticsData.historicalNotes = $('anHistoricalNotes').value;
+    analyticsData.forecastText = $('anForecastText').value;
+    localStorage.setItem('semey_analytics', JSON.stringify(analyticsData));
+    await saveAnalyticsToSupabase();
+    toast('Аналитика мәліметтері Supabase базасына сәтті сақталды!');
+  };
+ 
+  function initChart() {
+    const ctx = $('levelChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Су деңгейі, см', data: [], borderColor: '#2dd4e6', tension: 0.35, fill: true, backgroundColor: 'rgba(45,212,230,0.15)', borderWidth: 2 }] },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { grid: { color: 'rgba(125,211,252,0.1)' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+ 
+  function renderAll() {
+    const last = state.data[state.data.length - 1];
+    const selStation = state.stations.find(s => s.id == state.currentId);
+    
+    if(selStation && $('stationName')) {$('stationName').textContent = selStation.name;
+    }
+
+    if(last && $('kpiLevel')) {
+      $('kpiLevel').textContent = fmt(last.level);$('kpiTemp').textContent = fmt(last.temperature);
+      
+      const isCrit = last.level > 450;
+      const isWarn = last.level > 380 && !isCrit;
+      
+      $('kpiStatusText').textContent = isCrit ? 'Қауіпті деңгей!' : (isWarn ? 'Ескерту деңгейі' : 'Тұрақты режим');
+      $('kpiStatus').className = `badge ${isCrit ? 'badge-danger' : (isWarn ? 'badge-warn' : 'badge-ok')} text-base px-3 py-1.5`;
+      
+      if(isCrit) {
+        $('alertBanner').hidden = false;
+        $('alertText').textContent = `${selStation ? selStation.name : 'Бекетте'} су деңгейі критический шектен (${last.level} см) асты!`;
+      } else {
+        $('alertBanner').hidden = true;
+      }
+    }
+
+    const rangeLimit = parseInt($('rangeSelect').value) || 24;
+    const sliceData = state.data.slice(-rangeLimit);
+
+    if(chart) {
+      chart.data.labels = sliceData.map(r => r.created_at.slice(11, 16));
+      chart.data.datasets[0].data = sliceData.map(r => r.level);
+      chart.update();
+    }
+ 
+    if($('tableBody')) {$('tableBody').innerHTML = state.data.slice(-10).reverse().map(r => `
+        <tr>
+          <td>${r.created_at}</td>
+          <td class="num">${fmt(r.level)}</td>
+          <td class="num">${fmt(r.temperature)}</td>
+          <td><span class="badge badge-ok"><i></i>Тұрақты</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+ 
+  $('openEntry').onclick = () =>$('entryDialog').showModal();
+  $('entryClose').onclick =$('entryCancel').onclick = (e) => { e.preventDefault(); $('entryDialog').close(); };$('entryForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const stId = Number($('fStation').value);
+    const newRecord = {
+      created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      level: Number($('fLevel').value),
+      temperature: Number($('fTemp').value)
+    };
+    
+    if(!mockMeasurements[stId]) mockMeasurements[stId] = [];
+    mockMeasurements[stId].push(newRecord);
+    localStorage.setItem('semey_measurements', JSON.stringify(mockMeasurements));
+
+    const st = mockStations.find(s => s.id === stId);
+    if(st) st.latest_level = newRecord.level;
+    localStorage.setItem('semey_stations', JSON.stringify(mockStations));
+
+    await saveMeasurementToSupabase(stId, newRecord);
+    if(st) await saveStationToSupabase(st);
+
+    $('entryDialog').close();
+    toast('Жаңа өлшем Supabase базасына сәтті сақталды!');
+    loadMeasurements();
+    renderStationsTab();
+  };
+ 
+  $('csvBtn').onclick = () => {
+    let csvContent = "data:text/csv;charset=utf-8,Уақыт,Деңгей (см),Температура (C)\n";
+    state.data.forEach(row => {
+      csvContent += `${row.created_at},${row.level},${row.temperature}\n`;
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `semey_irtysh_station_${state.currentId}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast('CSV файлы жүктелді!');
+  };
+
+  $('stationSelect').onchange = (e) => { 
+    state.currentId = Number(e.target.value); 
+    loadMeasurements(); 
+  };
+  
+  $('rangeSelect').onchange = () => renderAll();$('refreshBtn').onclick = async () => { 
+    await syncFromSupabase();
+    loadStations(); 
+    loadMeasurements(); 
+    toast('Барлық деректер Supabase базасынан сәтті жаңартылды!'); 
+  };
+
+  $('alertClose').onclick = () => {$('alertBanner').hidden = true; };
+
+  function initMap() {
+    if (map !== null) {
+      return;
+    }
+
+    map = L.map('map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([50.4112, 80.2275], 11);
+    
+    // ESRI WORLD TOPO MAP
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 18
+    }).addTo(map);
+
+    // КООРДИНАТЫ РУСЛА РЕКИ ИРТЫШ
+    const irtyshRiverPath = [
+      [50.3520, 81.0450],
+      [50.3380, 80.8500],
+      [50.3400, 80.6200],
+      [50.3700, 80.3500],
+      [50.3950, 80.2750],
+      [50.4020, 80.2600],
+      [50.4080, 80.2520],
+      [50.4150, 80.2450],
+      [50.4280, 80.2280],
+      [50.4420, 80.2000],
+      [50.4550, 80.1650],
+      [50.4800, 80.0800]
+    ];
+
+    L.polyline(irtyshRiverPath, {
+      color: '#0e9fb3',
+      weight: 5,
+      opacity: 0.9,
+      lineJoin: 'round'
+    }).addTo(map).bindPopup("<b>Ертіс өзені арнасы</b><br>Семей гидроологиялық секторы");
+
+    setTimeout(() => { map.invalidateSize(); }, 250);
+  }
+ 
+  initChart();
+  await syncFromSupabase();
+  loadStations();
+  loadMeasurements();
+  initMap();
+  updateProfileHeaderUI();
+});
+</script>
+</body>
+</html>
