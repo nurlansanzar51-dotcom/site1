@@ -644,9 +644,16 @@
       </div>
     </div>
     <div class="flex items-center gap-1.5">
+      <button id="aiKeyToggle" type="button" class="btn icon-btn w-8 h-8 text-sm" title="API кілтін енгізу">🔑</button>
       <button id="aiClear" type="button" class="btn text-xs py-1 px-2.5" title="Тарихты тазарту">Тазарту</button>
       <button id="aiClose" type="button" class="btn icon-btn w-8 h-8 text-sm" title="Жабу">✕</button>
     </div>
+  </div>
+
+  <!-- Локальное хранение ключа (не публикуется в GitHub) -->
+  <div id="aiKeyBar" class="px-3 py-2 border-b divider flex items-center gap-2 hidden">
+    <input id="aiKeyInput" type="password" class="field text-xs py-1.5" placeholder="Google AI Studio кілті (AIza...)">
+    <button id="aiKeySave" type="button" class="btn btn-primary text-xs py-1.5 px-3 shrink-0">Сақтау</button>
   </div>
 
   <div id="aiMessages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
@@ -673,7 +680,7 @@
 
   const SUPABASE_URL = "https://btweapvzvjcuaehdfcjc.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_usE8RReLm_Ee3_33a9Ai0g_sKrWvtix";
-  const AI_API_KEY = "AQ.Ab8RN6Kv_3N0ZWUaU2p0BxbnZrJAn326x4yjd68dwZSRYHKkaQ";
+  const AI_KEY_STORAGE = "ertis_ai_key";
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
@@ -746,6 +753,10 @@
   };
 
   // ==================== AI ASSISTANT ====================
+  function getAiKey() {
+    return (localStorage.getItem(AI_KEY_STORAGE) || '').trim();
+  }
+
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -807,6 +818,20 @@ ${recentSummary || 'Өлшемдер жоқ'}
     const cleanText = userText.trim();
     if (!cleanText) return;
 
+    const apiKey = getAiKey();
+    if (!apiKey) {
+      $('aiKeyBar').classList.remove('hidden');
+      $('aiKeyInput').focus();
+      appendAiMessage('bot', 'Алдымен жоғарыдағы өріске Google AI Studio кілтін (<code>AIza...</code>) енгізіп, <b>Сақтау</b> батырмасын басыңыз.');
+      return;
+    }
+
+    if (!apiKey.startsWith('AIza')) {
+      $('aiKeyBar').classList.remove('hidden');
+      appendAiMessage('bot', '<span class="t-warn font-semibold">Кілт форматы сәйкес емес:</span> браузерден тікелей жұмыс істеу үшін Google AI Studio кілті (<code>AIza...</code>) қажет. Vertex AI (<code>AQ...</code>) кілті тек сервер арқылы жұмыс істейді.');
+      return;
+    }
+
     appendAiMessage('user', escapeHtml(cleanText));
     aiHistory.push({ role: 'user', parts: [{ text: cleanText }] });
 
@@ -827,16 +852,14 @@ ${recentSummary || 'Өлшемдер жоқ'}
       }
     };
 
-    const encodedKey = encodeURIComponent(AI_API_KEY);
+    const encodedKey = encodeURIComponent(apiKey);
     const endpoints = [
-      `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodedKey}`,
-      `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.0-flash:generateContent?key=${encodedKey}`,
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodedKey}`,
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodedKey}`
     ];
 
     let replyText = null;
-    let lastError = '';
+    const errors = [];
 
     for (const url of endpoints) {
       try {
@@ -847,7 +870,7 @@ ${recentSummary || 'Өлшемдер жоқ'}
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          lastError = data?.error?.message || `HTTP ${res.status}`;
+          errors.push(data?.error?.message || `HTTP ${res.status}`);
           continue;
         }
         const candidateText = data?.candidates?.[0]?.content?.parts
@@ -859,9 +882,9 @@ ${recentSummary || 'Өлшемдер жоқ'}
           replyText = candidateText;
           break;
         }
-        lastError = 'Бос жауап қайтарылды';
+        errors.push('Бос жауап қайтарылды');
       } catch (err) {
-        lastError = err.message || String(err);
+        errors.push(err.message || String(err));
       }
     }
 
@@ -870,7 +893,7 @@ ${recentSummary || 'Өлшемдер жоқ'}
       typingEl.innerHTML = formatAiText(replyText);
     } else {
       aiHistory.pop();
-      typingEl.innerHTML = `<span class="t-danger font-semibold">AI серверімен байланыс қатесі:</span><br>${escapeHtml(lastError)}<br><span class="text-xs muted">Егер файл тікелей дискіден (file://) ашылса, оны Live Server немесе локалды сервер арқылы ашып көріңіз.</span>`;
+      typingEl.innerHTML = `<span class="t-danger font-semibold">AI серверімен байланыс қатесі:</span><br>${escapeHtml(errors.join(' | '))}`;
     }
 
     $('aiMessages').scrollTop = $('aiMessages').scrollHeight;
@@ -880,10 +903,34 @@ ${recentSummary || 'Өлшемдер жоқ'}
   }
 
   function setupAiAssistant() {
+    const savedKey = getAiKey();
+    if (!savedKey) {
+      $('aiKeyBar').classList.remove('hidden');
+    } else {
+      $('aiKeyInput').value = savedKey;
+    }
+
+    $('aiKeyToggle').onclick = () => {
+      $('aiKeyBar').classList.toggle('hidden');
+      if (!$('aiKeyBar').classList.contains('hidden')) $('aiKeyInput').focus();
+    };
+
+    $('aiKeySave').onclick = () => {
+      const val = $('aiKeyInput').value.trim();
+      if (!val) {
+        localStorage.removeItem(AI_KEY_STORAGE);
+        toast('API кілті өшірілді');
+        return;
+      }
+      localStorage.setItem(AI_KEY_STORAGE, val);
+      $('aiKeyBar').classList.add('hidden');
+      toast('API кілті браузерге сақталды!');
+    };
+
     $('aiFab').onclick = () => {
       $('aiPanel').classList.toggle('hidden');
       if (!$('aiPanel').classList.contains('hidden')) {
-        $('aiInput').focus();
+        (getAiKey() ? $('aiInput') : $('aiKeyInput')).focus();
       }
     };
     $('aiClose').onclick = () => $('aiPanel').classList.add('hidden');
